@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ITSM Kanban</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--el:#21262d;--bd:#30363d;--tx:#e6edf3;--tx2:#8b949e;--ac:#58a6ff;--ok:#3fb950;--warn:#d29922;--org:#f0883e;--err:#f85149}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,sans-serif;font-size:14px;min-height:100vh}
+button{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--el);color:var(--tx);border-radius:8px;padding:7px 14px}
+button:hover:not(:disabled){border-color:var(--ac)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.pri{background:var(--ac);color:#0d1117;border-color:var(--ac);font-weight:600}
+button.sel{background:var(--ok);color:#0d1117;border-color:var(--ok)}
+button.no{background:var(--err);color:#fff;border-color:var(--err)}
+input[type=text],input[type=password]{width:100%;background:var(--el);border:1px solid var(--bd);border-radius:8px;color:var(--tx);padding:9px 12px;font:inherit}
+input:focus,button:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+label{display:block;color:var(--tx2);font-size:12px;margin:12px 0 4px}
+.hide{display:none!important}
+/* setup */
+#setup{max-width:560px;margin:0 auto;padding:40px 16px}
+#setup h1{text-align:center;font-size:26px}
+#setup .sub{text-align:center;color:var(--tx2);margin:6px 0 24px}
+.card{background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:20px;margin-bottom:16px}
+.card h2{font-size:15px;display:flex;justify-content:space-between;align-items:center}
+.badge{font-size:12px;font-weight:400;padding:2px 10px;border-radius:99px;background:var(--el);color:var(--tx2)}
+.badge.ok{background:rgba(63,185,80,.15);color:var(--ok)}
+.err{color:var(--err);margin-top:10px;font-size:13px}
+.drop{border:2px dashed var(--bd);border-radius:8px;padding:28px;text-align:center;color:var(--tx2);margin-top:12px}
+.drop.over{border-color:var(--ac);color:var(--ac)}
+.disabled{opacity:.45;pointer-events:none}
+/* board */
+header{display:flex;align-items:center;gap:12px;padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+header h1{font-size:17px;white-space:nowrap}
+#dot{width:9px;height:9px;border-radius:50%;background:var(--tx2)}
+#dot.on{background:var(--ok)}
+#search{max-width:280px}
+#count{color:var(--tx2);margin-left:auto;white-space:nowrap}
+#board{display:flex;gap:14px;padding:18px;overflow-x:auto;align-items:flex-start;min-height:calc(100vh - 58px)}
+.col{flex:0 0 280px;background:var(--panel);border:1px solid var(--bd);border-radius:8px;display:flex;flex-direction:column;max-height:calc(100vh - 94px)}
+.col.over{border-color:var(--ac)}
+.col h3{font-size:13px;padding:12px 14px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between}
+.col h3 span{color:var(--tx2);font-weight:400}
+.cards{padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;min-height:50px}
+.tk{position:relative;background:var(--el);border:1px solid var(--bd);border-left:4px solid var(--c);border-radius:6px;padding:10px 12px;cursor:pointer}
+.tk:hover{box-shadow:0 8px 28px rgba(0,0,0,.55)}
+.tk.drag{opacity:.4}
+.tk .id{color:var(--tx2);font-weight:600;margin-right:4px}
+.tk .ti{margin:4px 0 8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35}
+.chip{display:inline-block;background:var(--bg);border:1px solid var(--bd);border-radius:99px;padding:1px 9px;font-size:11px;color:var(--tx2);margin-right:4px}
+.tk .rs{display:block;margin-top:8px;padding:3px 10px;font-size:12px;color:var(--ok);border-color:rgba(63,185,80,.4)}
+.tk .rs:hover{background:rgba(63,185,80,.15)}
+.empty{color:var(--tx2);font-size:12px;text-align:center;padding:10px}
+.hi>div{flex:1}.hi .rs{align-self:center;padding:3px 10px;font-size:12px}
+/* modal */
+.ov{position:fixed;inset:0;background:rgba(1,4,9,.75);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.md{background:var(--panel);border:1px solid var(--bd);border-radius:8px;width:100%;max-width:640px;max-height:90vh;overflow:auto}
+.md .bar{height:5px;background:var(--c,var(--ac))}
+.md .in{padding:20px}
+.md h2{font-size:17px;margin-bottom:14px;line-height:1.35}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:8px;margin-bottom:6px}
+.kv b{color:var(--tx2);font-weight:400}
+.foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--bd);position:sticky;bottom:0;background:var(--panel)}
+.sec{border:1px solid var(--c);border-radius:8px;margin-bottom:10px}
+.sec>summary{padding:10px 14px;cursor:pointer;color:var(--c);font-weight:600}
+.sec .it{padding:8px 14px;border-top:1px solid var(--bd);display:flex;gap:10px;align-items:center;justify-content:space-between}
+.sec .it small{display:block;color:var(--tx2);margin-top:2px}
+.sec .btns{display:flex;gap:6px;flex-shrink:0}
+.hi{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd)}
+.hi i{width:4px;border-radius:2px;background:var(--c);flex-shrink:0}
+.hi small{color:var(--tx2)}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--el);border:1px solid var(--bd);padding:10px 18px;border-radius:8px;z-index:30}
+</style>
+</head>
+<body>
+
+<section id="setup">
+  <h1>🎫 ITSM Kanban</h1>
+  <p class="sub">Board compartilhado de tickets do Intercom</p>
+  <div class="card">
+    <h2>🔌 Conexão Supabase <span class="badge" id="badge">não configurado</span></h2>
+    <label for="url">Project URL</label>
+    <input type="text" id="url" placeholder="https://xxxxx.supabase.co" autocomplete="off">
+    <label for="key">Anon Key (Legacy)</label>
+    <input type="password" id="key" placeholder="eyJhbGci..." autocomplete="off">
+    <div style="text-align:right;margin-top:14px"><button class="pri" id="btnConn">Salvar e Conectar</button></div>
+    <div class="err hide" id="connErr"></div>
+  </div>
+  <div class="card disabled" id="importCard">
+    <h2>📂 Importar JSON</h2>
+    <div class="drop" id="drop">Arraste o arquivo aqui ou<br><br><button id="btnFile">Selecionar arquivo</button></div>
+    <input type="file" id="file" accept=".json,application/json" class="hide">
+    <div class="err hide" id="impErr"></div>
+    <div style="text-align:right;margin-top:12px"><button id="btnToBoard" class="hide">Voltar ao board</button></div>
+  </div>
+</section>
+
+<section id="app" class="hide">
+  <header>
+    <h1>🎫 ITSM Kanban</h1><span id="dot" title="Tempo real"></span>
+    <input type="text" id="search" placeholder="Buscar título ou ID...">
+    <span id="count"></span>
+    <button id="btnHist">🗄 Arquivados</button>
+    <button id="btnImp">⬆ Importar</button>
+  </header>
+  <main id="board"></main>
+</section>
+
+<div id="modalRoot"></div>
+
+<script>
+const THEMES={'Financeiro':'#3fb950','Mesas':'#d29922','Pedidos':'#58a6ff','SmartPOS':'#bc8cff','Integrações':'#8b949e','Impressão':'#f0883e','App Garçom':'#39d353','iFood':'#f85149','Saipos BOT':'#e4649d','Fiscal':'#56d364','Relatórios':'#c9a227','Estoque':'#a5815a','Site Delivery':'#76e3ea','Outros':'#6e7681'};
+const RULES=[ // ordem importa: "saipos bot" antes de "pedido/kanban"
+ [['lançamento','lancamento','concilia','financeiro'],'Financeiro'],[['smartpos'],'SmartPOS'],[['impress'],'Impressão'],
+ [['fiscal'],'Fiscal'],[['saipos bot'],'Saipos BOT'],[['mesa'],'Mesas'],[['ifood'],'iFood'],[['estoque'],'Estoque'],
+ [['garçom','garcom'],'App Garçom'],[['kanban','pedido','leitor'],'Pedidos'],[['vendas'],'Relatórios'],
+ [['site delivery'],'Site Delivery'],[['totem','pixel','api','bairro'],'Integrações'],[['rollback'],'Outros']];
+const CFG='itsm_cfg_v3';
+let sb=null,tickets=[],channel=null,search='';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=s=>String(s||'').toLowerCase().trim();
+const fmt=d=>d?new Date(d).toLocaleDateString('pt-BR'):'—';
+const col=t=>THEMES[t]||THEMES['Outros'];
+
+function detectTheme(title){
+  const m=String(title||'').match(/^\s*\[([^\]]+)\]/);
+  const k=norm(m?m[1]:title);
+  for(const [words,theme] of RULES) if(words.some(w=>k.includes(w))) return theme;
+  return 'Outros';
+}
+function toast(msg){const t=document.createElement('div');t.id='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+
+/* ---------- conexão ---------- */
+function friendlyError(e){
+  const m=(e&&e.message)||String(e);
+  if(/does not exist|schema cache|PGRST205|42P01/i.test(m+(e.code||''))) return 'Tabelas não encontradas. Execute o setup.sql no Supabase SQL Editor.';
+  if(/invalid api key|jwt|apikey/i.test(m)) return "Chave inválida. Use a chave 'anon' da aba Legacy no Supabase.";
+  if(/fetch|network|cors|failed|load/i.test(m)) return 'Erro de rede. Verifique a Project URL.';
+  return m;
+}
+async function connect(url,key,save){
+  $('connErr').classList.add('hide');
+  try{url=new URL(url.trim()).origin;$('url').value=url}catch(e){}
+  try{
+    if(!/^https?:\/\//.test(url)) throw new Error('Failed to fetch');
+    sb=supabase.createClient(url,key);
+    const {error}=await sb.from('tickets').select('id',{count:'exact',head:true});
+    if(error) throw error;
+    if(save) localStorage.setItem(CFG,JSON.stringify({url,key}));
+    $('badge').textContent='conectado ✓';$('badge').classList.add('ok');
+    $('importCard').classList.remove('disabled');
+    await loadTickets();subscribe();
+    if(tickets.length) showBoard();
+  }catch(e){
+    sb=null;$('badge').textContent='erro';$('badge').classList.remove('ok');
+    $('connErr').textContent=friendlyError(e);$('connErr').classList.remove('hide');
+  }
+}
+async function loadTickets(){
+  const {data,error}=await sb.from('tickets').select('*').order('added_at',{ascending:true});
+  if(error) throw error;
+  tickets=data||[];
+}
+function subscribe(){
+  if(channel) sb.removeChannel(channel);
+  channel=sb.channel('board-sync')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'tickets'},({new:r})=>{if(!tickets.some(t=>t.id===r.id)){tickets.push(r);render()}})
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'tickets'},({new:r})=>{tickets=tickets.map(t=>t.id===r.id?r:t);render()})
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'tickets'},({old:r})=>{tickets=tickets.filter(t=>t.id!==r.id);render();if(!tickets.length&&!$('app').classList.contains('hide'))showSetup()})
+    .subscribe(s=>$('dot').classList.toggle('on',s==='SUBSCRIBED'));
+}
+
+/* ---------- telas ---------- */
+function showBoard(){$('setup').classList.add('hide');$('app').classList.remove('hide');render()}
+function showSetup(){$('app').classList.add('hide');$('setup').classList.remove('hide');$('btnToBoard').classList.toggle('hide',!tickets.length)}
+
+function render(){
+  const q=norm(search);
+  const list=tickets.filter(t=>!q||norm(t.title).includes(q)||norm(t.id).includes(q));
+  $('count').textContent=`${list.length} ticket${list.length===1?'':'s'}`;
+  const board=$('board');board.innerHTML='';
+  for(const theme of Object.keys(THEMES)){
+    const items=list.filter(t=>(THEMES[t.theme]?t.theme:'Outros')===theme);
+    const c=document.createElement('div');c.className='col';c.dataset.theme=theme;
+    c.innerHTML=`<h3 style="color:${col(theme)}">${esc(theme)}<span>${items.length}</span></h3><div class="cards"></div>`;
+    const wrap=c.querySelector('.cards');
+    if(!items.length) wrap.innerHTML='<div class="empty">Nenhum ticket</div>';
+    for(const t of items){
+      const d=document.createElement('div');d.className='tk';d.draggable=true;d.dataset.id=t.id;d.style.setProperty('--c',col(theme));
+      d.innerHTML=`<div class="ti"><span class="id">#${esc(t.id)}</span>${esc(t.title)}</div>${t.team?`<span class="chip">${esc(t.team)}</span>`:''}${t.assignee?`<span class="chip">${esc(t.assignee)}</span>`:''}<button class="rs">✔ Resolvido</button>`;
+      d.onclick=e=>{if(e.target.classList.contains('rs')){e.stopPropagation();archive(t)}else openDetail(t)};
+      d.ondragstart=e=>{e.dataTransfer.setData('text/plain',t.id);d.classList.add('drag')};
+      d.ondragend=()=>d.classList.remove('drag');
+      wrap.appendChild(d);
+    }
+    c.ondragover=e=>{e.preventDefault();c.classList.add('over')};
+    c.ondragleave=()=>c.classList.remove('over');
+    c.ondrop=e=>{e.preventDefault();c.classList.remove('over');moveTicket(e.dataTransfer.getData('text/plain'),theme)};
+    board.appendChild(c);
+  }
+}
+
+/* ---------- ações ---------- */
+async function moveTicket(id,theme){
+  const t=tickets.find(x=>x.id===id);if(!t||t.theme===theme) return;
+  const old=t.theme;t.theme=theme;render();
+  const {error}=await sb.from('tickets').update({theme}).eq('id',id);
+  if(error){t.theme=old;render();toast('Erro ao mover: '+error.message)}
+}
+async function archive(t){
+  const {error:e1}=await sb.from('history').upsert({...t,removed_at:new Date().toISOString()});
+  if(e1) return toast('Erro ao arquivar: '+e1.message);
+  const {error:e2}=await sb.from('tickets').delete().eq('id',t.id);
+  if(e2) return toast('Erro ao arquivar: '+e2.message);
+  tickets=tickets.filter(x=>x.id!==t.id);closeModal();render();
+  if(!tickets.length) showSetup();
+}
+
+/* ---------- modais ---------- */
+function modal(html,color){
+  const r=$('modalRoot');
+  r.innerHTML=`<div class="ov"><div class="md" role="dialog" style="--c:${color||'var(--ac)'}"><div class="bar"></div>${html}</div></div>`;
+  r.querySelector('.ov').onmousedown=e=>{if(e.target.classList.contains('ov'))closeModal()};
+  return r;
+}
+function closeModal(){$('modalRoot').innerHTML=''}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+
+function openDetail(t){
+  const r=modal(`<div class="in"><h2>${esc(t.title)}</h2>
+   <div class="kv"><b>ID ITSM</b><span>#${esc(t.id)}</span></div>
+   <div class="kv"><b>Tema</b><span>${esc(t.theme)}</span></div>
+   <div class="kv"><b>Equipe</b><span>${esc(t.team||'—')}</span></div>
+   <div class="kv"><b>Responsável</b><span>${esc(t.assignee||'—')}</span></div>
+   <div class="kv"><b>Estado</b><span>${esc(t.state||'—')}</span></div>
+   <div class="kv"><b>Adicionado em</b><span>${fmt(t.added_at)}</span></div>
+   <div class="kv"><b>Conv ID</b><span>${esc(t.conv_id||'—')}</span></div>
+   <div class="kv"><b>Última atividade</b><span>${esc(t.preview||'—')}</span></div></div>
+   <div class="foot"><button id="mArch">✔ Resolvido</button><button id="mClose">Fechar</button></div>`,col(t.theme));
+  r.querySelector('#mClose').onclick=closeModal;
+  r.querySelector('#mArch').onclick=()=>archive(t);
+}
+async function openHistory(){
+  const {data,error}=await sb.from('history').select('*').order('removed_at',{ascending:false});
+  if(error) return toast(error.message);
+  const rows=(data||[]).map(h=>`<div class="hi" style="--c:${col(h.theme)}"><i></i><div><b>#${esc(h.id)}</b> ${esc(h.title)}<br><small>${esc(h.theme||'Outros')} · arquivado em ${fmt(h.removed_at)}</small></div><button class="rs" data-id="${esc(h.id)}">Restaurar</button></div>`).join('');
+  const r=modal(`<div class="in"><h2>🗄 Arquivados</h2>${rows||'<p style="color:var(--tx2)">Nenhum ticket arquivado.</p>'}</div><div class="foot"><button id="mClose">Fechar</button></div>`);
+  r.querySelector('#mClose').onclick=closeModal;
+  r.querySelectorAll('.rs').forEach(b=>b.onclick=()=>restore((data||[]).find(h=>h.id===b.dataset.id)));
+}
+async function restore(h){
+  if(!h) return;
+  const {removed_at,...row}=h;
+  const {error:e1}=await sb.from('tickets').upsert({...row,added_at:new Date().toISOString()});
+  if(e1) return toast('Erro ao restaurar: '+e1.message);
+  const {error:e2}=await sb.from('history').delete().eq('id',h.id);
+  if(e2) return toast('Erro ao restaurar: '+e2.message);
+  await loadTickets();render();openHistory();toast(`#${h.id} voltou para o board`);
+}
+
+/* ---------- importação ---------- */
+async function handleFile(f){
+  const err=$('impErr');err.classList.add('hide');
+  try{
+    const json=JSON.parse(await f.text());
+    if(!Array.isArray(json.tickets)) throw new Error('JSON inválido: campo "tickets" não encontrado.');
+    const [a,b]=await Promise.all([sb.from('tickets').select('id'),sb.from('history').select('id,title,removed_at')]);
+    if(a.error||b.error) throw (a.error||b.error);
+    const active=new Set(a.data.map(x=>x.id));
+    const histById=new Map(b.data.map(x=>[x.id,x]));
+    const histByTitle=new Map(b.data.map(x=>[norm(x.title),x]));
+    const seen=new Set(),add=[],ign=[],ret=[],dup=[];
+    for(const t of json.tickets){
+      const id=String(t.ticket_id??'').trim();
+      if(!id||active.has(id)||seen.has(id)){ign.push({id,title:t.title});continue}
+      seen.add(id);
+      const row={id,conv_id:t.conv_id??null,title:t.title||'(sem título)',theme:detectTheme(t.title),assignee:t.assignee??null,team:t.team??null,preview:t.preview??null,state:t.state??null};
+      if(histById.has(id)) ret.push({row,prev:histById.get(id),ok:null});
+      else if(histByTitle.has(norm(t.title))) dup.push({row,prev:histByTitle.get(norm(t.title)),ok:null});
+      else add.push(row);
+    }
+    reviewModal({add,ign,ret,dup});
+  }catch(e){err.textContent='Erro ao ler o arquivo: '+e.message;err.classList.remove('hide')}
+}
+function reviewModal({add,ign,ret,dup}){
+  const li=(t)=>`<div class="it"><div>#${esc(t.id)} ${esc(t.title)}</div></div>`;
+  const dec=(arr,key,color,label,sub)=>arr.length?`<details class="sec" open style="--c:${color}"><summary>${label} (${arr.length})</summary>${arr.map((x,i)=>`<div class="it"><div>#${esc(x.row.id)} ${esc(x.row.title)}<small>${sub(x)}</small></div><div class="btns" data-k="${key}" data-i="${i}"><button data-v="1">Adicionar</button><button data-v="0">Ignorar</button></div></div>`).join('')}</details>`:'';
+  const r=modal(`<div class="in"><h2>Revisar importação</h2>
+   ${add.length?`<details class="sec" open style="--c:var(--ok)"><summary>Serão adicionados (${add.length})</summary>${add.map(x=>li(x)).join('')}</details>`:''}
+   ${ign.length?`<details class="sec" style="--c:var(--tx2)"><summary>Já estão no board — ignorados (${ign.length})</summary>${ign.map(li).join('')}</details>`:''}
+   ${dec(ret,'ret','var(--org)','Ticket resolvido que retornou',x=>`Arquivado em ${fmt(x.prev.removed_at)}`)}
+   ${dec(dup,'dup','var(--warn)','Título idêntico a ticket do passado',x=>`Ticket anterior: #${esc(x.prev.id)} (arquivado em ${fmt(x.prev.removed_at)})`)}
+   </div><div class="foot"><button id="mCancel">Cancelar</button><button class="pri" id="mOk">Confirmar</button></div>`);
+  const groups={ret,dup};
+  const okBtn=r.querySelector('#mOk');
+  const check=()=>{okBtn.disabled=[...ret,...dup].some(x=>x.ok===null)};
+  r.querySelectorAll('.btns').forEach(b=>b.onclick=e=>{
+    const v=e.target.dataset.v;if(v===undefined) return;
+    groups[b.dataset.k][b.dataset.i].ok=v==='1';
+    b.querySelectorAll('button').forEach(x=>x.className=x===e.target?(v==='1'?'sel':'no'):'');
+    check();
+  });
+  check();
+  r.querySelector('#mCancel').onclick=closeModal;
+  okBtn.onclick=async()=>{
+    okBtn.disabled=true;
+    const rows=[...add,...[...ret,...dup].filter(x=>x.ok).map(x=>x.row)].map(x=>({...x,added_at:new Date().toISOString()}));
+    if(rows.length){
+      const {error}=await sb.from('tickets').upsert(rows,{onConflict:'id',ignoreDuplicates:true});
+      if(error){okBtn.disabled=false;return toast('Erro ao importar: '+error.message)}
+    }
+    const had=tickets.length;
+    await loadTickets();closeModal();
+    toast(`${rows.length} ticket(s) adicionado(s)`);
+    if(had===0&&tickets.length) showBoard();else {render();showSetup()}
+  };
+}
+
+/* ---------- eventos ---------- */
+$('btnConn').onclick=()=>connect($('url').value.trim(),$('key').value.trim(),true);
+$('btnFile').onclick=()=>$('file').click();
+$('file').onchange=e=>{if(e.target.files[0]) handleFile(e.target.files[0]);e.target.value=''};
+const dz=$('drop');
+dz.ondragover=e=>{e.preventDefault();dz.classList.add('over')};
+dz.ondragleave=()=>dz.classList.remove('over');
+dz.ondrop=e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0])};
+$('btnImp').onclick=showSetup;
+$('btnToBoard').onclick=showBoard;
+$('btnHist').onclick=openHistory;
+$('search').oninput=e=>{search=e.target.value;render()};
+
+(function init(){
+  try{
+    const c=JSON.parse(localStorage.getItem(CFG)||'null');
+    if(c&&c.url&&c.key){$('url').value=c.url;$('key').value=c.key;connect(c.url,c.key,false)}
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
