@@ -56,6 +56,8 @@ Cada pessoa faz isso uma vez ao abrir o app pela primeira vez.
 | Arquivar ticket resolvido | ✕ no card ou botão "Arquivar" no detalhe |
 | Mover entre colunas | Arrastar o card |
 | Buscar | Campo de busca no topo |
+| Filtrar colunas | Chips abaixo do topo (com a contagem de cada coluna); clique em um ou mais para ver só essas colunas, "Todas" limpa o filtro |
+| Total de tickets | Canto superior direito ("Total: N tickets" ou "Exibindo X de N" quando há filtro/busca) |
 | Ver histórico | 📚 Histórico |
 | Sincronização ao vivo | Automática — ponto verde = ao vivo |
 
